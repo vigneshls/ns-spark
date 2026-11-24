@@ -1,0 +1,275 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Supabase PostgreSQL. DATABASE_URL = pooled (port 6543, ?pgbouncer=true), DIRECT_URL = direct (5432, used by migrations).
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Institution {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  departments Department[]
+  projects    Project[]
+  users       User[]
+  deletedAt   DateTime?
+}
+
+model Department {
+  id            String      @id @default(cuid())
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  name          String
+  hodId         String?     @unique
+  users         User[]      @relation("DeptUsers")
+  projects      Project[]
+  deletedAt     DateTime?
+
+  @@unique([institutionId, name])
+}
+
+model User {
+  id            String      @id @default(cuid())
+  email         String      @unique
+  name          String
+  passwordHash  String
+  role          String // ADMIN | NS_SPARK | PRINCIPAL | SECRETARY | HOD | FACULTY | STUDENT
+  institutionId String?
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+  departmentId  String?
+  department    Department? @relation("DeptUsers", fields: [departmentId], references: [id])
+  employeeId    String? // faculty ID
+  registerNo    String? // student register number
+  yearSem       String?
+  active        Boolean     @default(true)
+  deletedAt     DateTime?
+  createdAt     DateTime    @default(now())
+
+  memberships   ProjectMember[]
+  timesheets    Timesheet[]
+  notifications Notification[]
+  audits        AuditLog[]
+}
+
+model Client {
+  id          String    @id @default(cuid())
+  name        String
+  orgType     String
+  contactName String
+  designation String
+  mobile      String
+  email       String
+  address     String
+  city        String
+  state       String
+  country     String
+  website     String?
+  verified    Boolean   @default(false) // frozen once true
+  verifiedAt  DateTime?
+  verifiedBy  String?
+  projects    Project[]
+}
+
+model Project {
+  id            String      @id @default(cuid())
+  code          String      @unique // NSP-2026-0001
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  departmentId  String?
+  department    Department? @relation(fields: [departmentId], references: [id])
+  clientId      String
+  client        Client      @relation(fields: [clientId], references: [id])
+
+  title          String
+  category       String
+  description    String
+  requirements   String
+  problem        String
+  deliverables   String
+  preferredTech  String?
+  expectedBudget Float?
+  expectedDays   Int?
+  expectedEnd    DateTime?
+  expectations   String?
+  remarks        String?
+
+  status         String   @default("DRAFT")
+  coordinatorId  String?
+  commencedAt    DateTime? // actual commencement; timesheets blocked before
+  approvedEndAt  DateTime?
+  completedAt    DateTime?
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  documents  ProjectDocument[]
+  approvals  Approval[]
+  proposals  Proposal[]
+  members    ProjectMember[]
+  milestones Milestone[]
+  timesheets Timesheet[]
+  reports    DailyReport[]
+  history    WorkflowHistory[]
+
+  @@index([status])
+  @@index([institutionId, departmentId])
+}
+
+model ProjectDocument {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id])
+  fileName   String
+  mimeType   String
+  size       Int
+  storedPath String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+}
+
+// One row per decision; stage = INITIAL | FINAL, level = PRINCIPAL | SECRETARY | NS_SPARK
+model Approval {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  stage     String
+  level     String
+  decision  String // APPROVED | REJECTED | CLARIFICATION | REVISION | FORWARDED | RETURNED
+  remarks   String?
+  userId    String
+  createdAt DateTime @default(now())
+}
+
+model Proposal {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  version     Int
+  state       String   @default("DRAFT") // DRAFT | SUBMITTED | SUPERSEDED | APPROVED
+  content     String // JSON: analysis, resources, tech, plan, financials, risks
+  totalCost   Float?
+  quotation   Float?
+  submittedBy String?
+  submittedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@unique([projectId, version])
+}
+
+model ProjectMember {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  kind           String // COORDINATOR | FACULTY | STUDENT
+  role           String?
+  responsibility String?
+  allocatedAt    DateTime @default(now())
+  active         Boolean  @default(true)
+
+  @@unique([projectId, userId])
+}
+
+model Milestone {
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id])
+  title     String
+  dueDate   DateTime
+  doneAt    DateTime?
+  percent   Int       @default(0)
+}
+
+// kind STUDENT | FACULTY; status DRAFT | SUBMITTED | FACULTY_APPROVED | CORRECTION | REJECTED | HOD_APPROVED | HOD_RETURNED
+model Timesheet {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  kind      String
+  date      DateTime
+  work      String
+  tasksDone String?
+  hours     Float
+  progress  Int?
+  issues    String?
+  nextPlan  String?
+  evidence  String?
+  status    String   @default("DRAFT")
+  submittedAt DateTime?
+  createdAt DateTime @default(now())
+  reviews   TimesheetReview[]
+
+  @@unique([projectId, userId, date, kind])
+}
+
+model TimesheetReview {
+  id          String    @id @default(cuid())
+  timesheetId String
+  timesheet   Timesheet @relation(fields: [timesheetId], references: [id])
+  level       String // FACULTY | HOD
+  decision    String
+  remarks     String?
+  userId      String
+  createdAt   DateTime  @default(now())
+}
+
+model DailyReport {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  period    String // DAILY | WEEKLY
+  forDate   DateTime
+  summary   String
+  status    String   @default("HOD_APPROVED") // HOD_APPROVED | NS_REVIEWED | FORWARDED
+  nsRemarks String?
+  createdAt DateTime @default(now())
+}
+
+model WorkflowHistory {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  fromStatus String
+  toStatus   String
+  action     String
+  userId     String
+  role       String
+  remarks    String?
+  createdAt  DateTime @default(now())
+
+  @@index([projectId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  projectId String?
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  role       String?
+  action     String
+  projectId  String?
+  prevStatus String?
+  newStatus  String?
+  remarks    String?
+  changes    String? // JSON diff
+  createdAt  DateTime @default(now())
+}
