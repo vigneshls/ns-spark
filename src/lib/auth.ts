@@ -6,7 +6,12 @@ import type { Actor } from "@/lib/services/workflow";
 import type { Role } from "@/lib/workflow/machine";
 
 const COOKIE = "nss_session";
-const key = () => new TextEncoder().encode(process.env.SESSION_SECRET ?? "dev-only-secret-change-me-please-0000");
+const key = () => {
+  const s = process.env.SESSION_SECRET;
+  if (process.env.NODE_ENV === "production" && (!s || s.length < 32 || s.startsWith("change-me")))
+    throw new Error("SESSION_SECRET must be set to a random string of at least 32 characters in production");
+  return new TextEncoder().encode(s ?? "dev-only-secret-change-me-please-0000");
+};
 
 export async function createSession(userId: string) {
   const token = await new SignJWT({ uid: userId }).setProtectedHeader({ alg: "HS256" }).setExpirationTime("8h").sign(key());

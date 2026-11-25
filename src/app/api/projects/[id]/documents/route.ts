@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { putFile } from "@/lib/storage";
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { getSession, projectScope } from "@/lib/auth";
@@ -24,10 +24,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (file.size > MAX) return back("err=File+exceeds+10+MB");
   const ext = path.extname(file.name).toLowerCase();
   if (!ALLOWED[ext] || !ALLOWED[ext].includes(file.type)) return back("err=File+type+not+allowed");
-  const dir = path.join(process.cwd(), "storage");
-  await mkdir(dir, { recursive: true });
-  const stored = `${randomUUID()}${ext}`;
-  await writeFile(path.join(dir, stored), Buffer.from(await file.arrayBuffer()));
+  let stored: string;
+  try { stored = await putFile(`${id}/${randomUUID()}${ext}`.replace("/", "_"), Buffer.from(await file.arrayBuffer()), file.type); }
+  catch { return back("err=File+storage+is+unavailable"); }
   await prisma.projectDocument.create({ data: { projectId: id, fileName: path.basename(file.name), mimeType: file.type, size: file.size, storedPath: stored, uploadedBy: u.id } });
   await prisma.auditLog.create({ data: { userId: u.id, role: u.role, action: "upload_document", projectId: id, remarks: file.name } });
   return back("ok=Document+uploaded");

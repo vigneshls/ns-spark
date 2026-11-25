@@ -23,4 +23,4 @@ Use a separate schema so test data never touches real data: set `DATABASE_URL`/`
 ## Production
 - Set `SESSION_SECRET` (long random).
 - Uploaded files live in `./storage` (move to Supabase Storage if deploying to a host without persistent disk).
-- Design docs: `docs/ARCHITECTURE.md`.
+- Deployment guide: `DEPLOY.md`. Design docs: `docs/ARCHITECTURE.md`.
