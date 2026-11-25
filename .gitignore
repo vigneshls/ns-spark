@@ -43,3 +43,4 @@ next-env.d.ts
 storage/
 prisma/*.db
 prisma/*.db-journal
+prisma/schema.preview.prisma
